@@ -35,7 +35,7 @@ class RDTLayer(object):
         self.dataReceived = ''
         self.countSegmentTimeouts = 0
         self.waiting_ack = []
-        self.seq_rcvd = []
+        self.last_seq_rcvd = 0
 
     # ################################################################################################################ #
     # setSendChannel()                                                                                                 #
@@ -102,9 +102,11 @@ class RDTLayer(object):
         # The seqnum is the sequence number for the segment (in character number, not bytes)
 
         if self.seq < len(self.dataToSend):
+
             # Reset the seq number to the highest char position received by the server so far. If all was received 
-            # correctly then this should not change
-            if len(self.receiveChannel.receiveQueue) > 0:
+            # correctly then this should not change. If packet was missing, the transmission will start at the 
+            # missing packet.
+            if (len(self.receiveChannel.receiveQueue) > 0) and (self.receiveChannel.receiveQueue[0].acknum >= 0):
                 self.seq = self.receiveChannel.receiveQueue[len(self.receiveChannel.receiveQueue) -1].acknum
             
             for seg in range(math.floor(FLOW_CONTROL_WIN_SIZE / DATA_LENGTH)):
@@ -153,17 +155,30 @@ class RDTLayer(object):
             # ############################################################################################################ #
             # How do you respond to what you have received?
             # How can you tell data segments apart from ack segemnts?
+            for segment in range(len(listIncomingSegments)):
+                p_load = listIncomingSegments[segment].payload
+                print("Server will process: ", p_load)
 
             for segment in range(len(listIncomingSegments)):
-                self.dataReceived += listIncomingSegments[segment].payload
-                segmentAck.acknum = self.seq + len(listIncomingSegments[segment].payload)
-                self.seq += len(listIncomingSegments[segment].payload)
+                # acknum of -1 indicates server processing message packets
+                if listIncomingSegments[segment].acknum == -1:
 
-                # ############################################################################################################ #
-                # Display response segment
-                segmentAck.setAck(segmentAck.acknum)
-                print("Sending ack: ", segmentAck.to_string())
+                    # seq number -1 indicates packet went missing. Break transmission
+                    if listIncomingSegments[segment].seqnum >= 0:
 
+                        self.dataReceived += listIncomingSegments[segment].payload
+                        self.seq += len(listIncomingSegments[segment].payload)
+                        self.last_seq_rcvd = self.seq
+                        segmentAck.acknum = self.seq
+
+                        # ############################################################################################################ #
+                        # Display response segment
+                        segmentAck.setAck(segmentAck.acknum)
+                        # print("Sending ack: ", segmentAck.to_string(), " ", listIncomingSegments[segment].payload)
+                    else:
+                        pass
+                else:
+                    pass
                 # Use the unreliable sendChannel to send the ack packet
             self.sendChannel.send(segmentAck)
 
