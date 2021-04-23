@@ -25,26 +25,6 @@ currentIteration = 0
 
 
 class RDTLayer(object):
-    # ################################################################################################################ #
-    # Class Scope Variables                                                                                            #
-    #                                                                                                                  #
-    #                                                                                                                  #
-    #                                                                                                                  #
-    #                                                                                                                  #
-    #                                                                                                                  #
-    # ################################################################################################################ #
-     # in characters                     # The length of the string data that will be sent per packet...
-                              # Use this for segment 'timeouts'
-    # Add items as needed
-
-    # ################################################################################################################ #
-    # __init__()                                                                                                       #
-    #                                                                                                                  #
-    #                                                                                                                  #
-    #                                                                                                                  #
-    #                                                                                                                  #
-    #                                                                                                                  #
-    # ################################################################################################################ #
     def __init__(self):
         self.sendChannel = None
         self.receiveChannel = None
@@ -54,15 +34,14 @@ class RDTLayer(object):
         self.seq = 0
         self.dataReceived = ''
         self.countSegmentTimeouts = 0
-
+        self.waiting_ack = []
+        self.seq_rcvd = []
 
     # ################################################################################################################ #
     # setSendChannel()                                                                                                 #
     #                                                                                                                  #
     # Description:                                                                                                     #
-    # Called by main to set the unreliable sending lower-layer channel                                                 #
-    #                                                                                                                  #
-    #                                                                                                                  #
+    # Called by main to set the unreliable sending lower-layer channel                                                 #                                                                                                                #
     # ################################################################################################################ #
     def setSendChannel(self, channel):
         self.sendChannel = channel
@@ -71,9 +50,7 @@ class RDTLayer(object):
     # setReceiveChannel()                                                                                              #
     #                                                                                                                  #
     # Description:                                                                                                     #
-    # Called by main to set the unreliable receiving lower-layer channel                                               #
-    #                                                                                                                  #
-    #                                                                                                                  #
+    # Called by main to set the unreliable receiving lower-layer channel                                               #                                                                                                                #
     # ################################################################################################################ #
     def setReceiveChannel(self, channel):
         self.receiveChannel = channel
@@ -82,9 +59,7 @@ class RDTLayer(object):
     # setDataToSend()                                                                                                  #
     #                                                                                                                  #
     # Description:                                                                                                     #
-    # Called by main to set the string data to send                                                                    #
-    #                                                                                                                  #
-    #                                                                                                                  #
+    # Called by main to set the string data to send                                                                    #                                                                                                                 #
     # ################################################################################################################ #
     def setDataToSend(self,data):
         self.dataToSend = data
@@ -93,26 +68,16 @@ class RDTLayer(object):
     # getDataReceived()                                                                                                #
     #                                                                                                                  #
     # Description:                                                                                                     #
-    # Called by main to get the currently received and buffered string data, in order                                  #
-    #                                                                                                                  #
-    #                                                                                                                  #
+    # Called by main to get the currently received and buffered string data, in order                                  #                                                                                                                 #
     # ################################################################################################################ #
     def getDataReceived(self):
-        # ############################################################################################################ #
-        # Identify the data that has been received...
-
-        # print('getDataReceived(): Complete this...')
-
-        # ############################################################################################################ #
         return self.dataReceived
 
     # ################################################################################################################ #
     # processData()                                                                                                    #
     #                                                                                                                  #
     # Description:                                                                                                     #
-    # "timeslice". Called by main once per iteration                                                                   #
-    #                                                                                                                  #
-    #                                                                                                                  #
+    # "timeslice". Called by main once per iteration                                                                   #                                                                                                                 #
     # ################################################################################################################ #
     def processData(self):
         self.currentIteration += 1
@@ -123,15 +88,9 @@ class RDTLayer(object):
     # processSend()                                                                                                    #
     #                                                                                                                  #
     # Description:                                                                                                     #
-    # Manages Segment sending tasks                                                                                    #
-    #                                                                                                                  #
-    #                                                                                                                  #
+    # Manages Segment sending tasks                                                                                    #                                                                                                                #
     # ################################################################################################################ #
     def processSend(self):
-        
-
-        # ############################################################################################################ #
-        # print('processSend(): Complete this...')
 
         # You should pipeline segments to fit the flow-control window
         # The flow-control window is the constant RDTLayer.FLOW_CONTROL_WIN_SIZE
@@ -142,7 +101,11 @@ class RDTLayer(object):
         # The data is just part of the entire string that you are trying to send.
         # The seqnum is the sequence number for the segment (in character number, not bytes)
 
-        if len(self.dataToSend) > 0:
+        if self.seq < len(self.dataToSend):
+            # Reset the seq number to the highest char position received by the server so far. If all was received 
+            # correctly then this should not change
+            if len(self.receiveChannel.receiveQueue) > 0:
+                self.seq = self.receiveChannel.receiveQueue[len(self.receiveChannel.receiveQueue) -1].acknum
             
             for seg in range(math.floor(FLOW_CONTROL_WIN_SIZE / DATA_LENGTH)):
                 segmentSend = Segment()
@@ -158,6 +121,7 @@ class RDTLayer(object):
 
                 # Increment seq number
                 self.seq += DATA_LENGTH
+                self.waiting_ack.append(self.seq)
 
         else:
             # No data to send, in acknowledgement cycle
@@ -167,9 +131,7 @@ class RDTLayer(object):
     # processReceive()                                                                                                 #
     #                                                                                                                  #
     # Description:                                                                                                     #
-    # Manages Segment receive tasks                                                                                    #
-    #                                                                                                                  #
-    #                                                                                                                  #
+    # Manages Segment receive tasks                                                                                    #                                                                                                              #
     # ################################################################################################################ #
     def processReceiveAndSendRespond(self):
         segmentAck = Segment()                  # Segment acknowledging packet(s) received
