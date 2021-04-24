@@ -137,6 +137,7 @@ class RDTLayer(object):
     # ################################################################################################################ #
     def processReceiveAndSendRespond(self):
         segmentAck = Segment()                  # Segment acknowledging packet(s) received
+        segmentAck.acknum = self.seq
 
         # This call returns a list of incoming segments (see Segment class)...
         # listIncomingSegments = self.receiveChannel.receive()
@@ -156,27 +157,38 @@ class RDTLayer(object):
             # How do you respond to what you have received?
             # How can you tell data segments apart from ack segemnts?
             for segment in range(len(listIncomingSegments)):
-                p_load = listIncomingSegments[segment].payload
-                print("Server will process: ", p_load)
+                print("Server will process: ", listIncomingSegments[segment].payload)
 
             for segment in range(len(listIncomingSegments)):
                 # acknum of -1 indicates server processing message packets
                 if listIncomingSegments[segment].acknum == -1:
 
                     # seq number -1 indicates packet went missing. Break transmission
-                    if listIncomingSegments[segment].seqnum >= 0:
+                    if (listIncomingSegments[segment].seqnum >= 0) and (listIncomingSegments[segment].seqnum > self.seq) is not True:
 
-                        self.dataReceived += listIncomingSegments[segment].payload
-                        self.seq += len(listIncomingSegments[segment].payload)
-                        self.last_seq_rcvd = self.seq
-                        segmentAck.acknum = self.seq
+                        # Since client performed checksum on Segment converted to string
+                        # a sement needs to reconstructed on the server side to calculate and compare checksums
+                        testSegment = Segment()
+                        testSegment.setData(self.seq, listIncomingSegments[segment].payload)
+                        
+                        chck_sum1 = testSegment.checksum
+                        chck_sum2 = listIncomingSegments[segment].checksum
 
-                        # ############################################################################################################ #
-                        # Display response segment
-                        segmentAck.setAck(segmentAck.acknum)
-                        # print("Sending ack: ", segmentAck.to_string(), " ", listIncomingSegments[segment].payload)
+                        if chck_sum1 == chck_sum2:
+
+                            self.dataReceived += listIncomingSegments[segment].payload
+                            self.seq += len(listIncomingSegments[segment].payload)
+                            self.last_seq_rcvd = self.seq
+                            segmentAck.acknum = self.seq
+
+                            # ############################################################################################################ #
+                            # Display response segment
+                            segmentAck.setAck(segmentAck.acknum)
+                            # print("Sending ack: ", segmentAck.to_string(), " ", listIncomingSegments[segment].payload)
+                        else:
+                            pass
                     else:
-                        pass
+                        break
                 else:
                     pass
                 # Use the unreliable sendChannel to send the ack packet
