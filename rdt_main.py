@@ -19,6 +19,9 @@ import time
 
 # dataToSend = "The quick brown fox jumped over the lazy dog"
 
+# dataToSend = "We choose to go to the moon. We choose to go to the moon in this "\
+# "decade and do the other things, not because they are easy, but because they are hard."
+
 dataToSend = "\r\n\r\n...We choose to go to the moon. We choose to go to the moon in this "\
 "decade and do the other things, not because they are easy, but because they are hard, "\
 "because that goal will serve to organize and measure the best of our energies and skills, "\
@@ -44,9 +47,9 @@ server = RDTLayer()
 
 # Start with a reliable channel (all flags false)
 # As you create your rdt algorithm for send and receive, turn these on.
-outOfOrder = False
+outOfOrder = True
 dropPackets = False
-delayPackets = False
+delayPackets = True
 dataErrors = False
 
 # Create unreliable communication channels
@@ -81,6 +84,9 @@ while True:
     print("Main--------------------------------------------")
     dataReceivedFromClient = server.getDataReceived()
     print("DataReceivedFromClient: {0}".format(dataReceivedFromClient))
+
+    if loopIter >= 105:
+        print("Loop Iter: ", loopIter)
 
     if dataReceivedFromClient == dataToSend:
         print('$$$$$$$$ ALL DATA RECEIVED $$$$$$$$')

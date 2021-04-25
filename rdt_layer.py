@@ -35,6 +35,8 @@ class RDTLayer(object):
         self.dataReceived = ''
         self.countSegmentTimeouts = 0
         self.waiting_ack = []
+        self.captured_segments = []
+        self.processed_seq = [] # Track of processed seq numbers. Discard duplicate segments
         self.last_seq_rcvd = 0
 
     # ################################################################################################################ #
@@ -71,7 +73,11 @@ class RDTLayer(object):
     # Called by main to get the currently received and buffered string data, in order                                  #                                                                                                                 #
     # ################################################################################################################ #
     def getDataReceived(self):
-        return self.dataReceived
+        result = ''
+        segments = sorted(self.captured_segments, key=lambda s: s.seqnum, reverse=False)
+        for payload in segments:
+            result += payload.payload
+        return result
 
     # ################################################################################################################ #
     # processData()                                                                                                    #
@@ -132,19 +138,46 @@ class RDTLayer(object):
     def processReceiveAndSendRespond(self):
 
         if self.seq < len(self.dataToSend):
+            # Client handling acknowledgemetns received from the server
             if len(self.receiveChannel.receiveQueue) > 0:
-                a = len(self.receiveChannel.receiveQueue)
-                for seg in self.receiveChannel.receiveQueue:
-                    print(seg.acknum)
-                a = 1
+                sorted_incoming = sorted(self.receiveChannel.receive(), key=lambda s: s.seqnum, reverse=False)
+                
+                # DO I NEED THIS???
+                # Remove acknowledged segments from list of acknowledgements
+                for seg in sorted_incoming:
+                    print("Client received ask for: ", seg.acknum)
+                    if seg.acknum in self.waiting_ack:
+                        self.waiting_ack.remove(seg.acknum) 
+
+                # Resend packets which have not been acknowledged
+                resent = []
+                for seq in self.waiting_ack:
+                    if seq < (self.seq - (DATA_LENGTH * 3)):
+                        # Get data to resend
+                        start = seq 
+                        end = seq + DATA_LENGTH
+                        data = self.dataToSend[start: end]
+
+                        # Form then send a segment
+                        segmentSend = Segment()
+                        segmentSend.setData(seq, data)
+                        print("Resending segment: ", segmentSend.to_string())
+                        self.sendChannel.send(segmentSend)
+
+                        # Remove, but keep track of segments resent
+                        self.waiting_ack.remove(seq)
+                        resent.append(seq)
+                # Add resemt segments to wait ack list
+                for x in resent:
+                    self.waiting_ack.append(x)
+                resent.clear()                
             else:
                 pass
 
         else:
-            segmentAck = Segment()                  # Segment acknowledging packet(s) received
+            # Server receiving data
 
             # This call returns a list of incoming segments (see Segment class)...
-            # listIncomingSegments = self.receiveChannel.receive()
             listIncomingSegments = sorted(self.receiveChannel.receive(), key=lambda s: s.seqnum, reverse=False)
             inc_seg_len = len(listIncomingSegments)
 
@@ -162,17 +195,23 @@ class RDTLayer(object):
                 # for segment in range(len(listIncomingSegments)):
                 #     print("Server will process: ", listIncomingSegments[segment].payload)
 
+                
                 for segment in range(len(listIncomingSegments)):
-                    self.dataReceived += listIncomingSegments[segment].payload
-                    self.seq += len(listIncomingSegments[segment].payload)
-                    
+                    if listIncomingSegments[segment].seqnum not in self.processed_seq:
 
-                    # ############################################################################################################ #
-                    # Display response segment
-                    segmentAck.setAck(self.seq)
-                    print("Sending ack: ", segmentAck.to_string(), " ", listIncomingSegments[segment].payload)
+                        segmentAck = Segment()     # Segment acknowledging packet(s) received
+                        segmentAck.setAck(listIncomingSegments[segment].seqnum)
+                        print("Sending ack: ", segmentAck.to_string(), " ", listIncomingSegments[segment].payload)
 
-                    # Use the unreliable sendChannel to send the ack packet
-                    self.sendChannel.send(segmentAck)
+                        # Use the unreliable sendChannel to send the ack packet
+                        self.sendChannel.send(segmentAck)
+                        self.captured_segments.append(listIncomingSegments[segment])
+                        self.processed_seq.append(listIncomingSegments[segment].seqnum)
+                        self.processed_seq.sort()
+                    else:
+                        segmentAck = Segment()     # Segment acknowledging packet(s) received
+                        segmentAck.setAck(listIncomingSegments[segment].seqnum)
+                        print("Sending ack: ", segmentAck.to_string(), " ", listIncomingSegments[segment].payload)
+                        self.sendChannel.send(segmentAck)
 
 
