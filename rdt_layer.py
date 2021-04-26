@@ -29,6 +29,7 @@ class RDTLayer(object):
         self.sendChannel = None
         self.receiveChannel = None
         self.dataToSend = ''
+        self.data_len = 0
         self.currentIteration = 0
         # Add items as needed
         self.seq = 0
@@ -107,7 +108,7 @@ class RDTLayer(object):
         # The data is just part of the entire string that you are trying to send.
         # The seqnum is the sequence number for the segment (in character number, not bytes)
 
-        if self.seq < len(self.dataToSend):
+        if (len(self.dataToSend) > 0) and (self.seq < len(self.dataToSend)):
             
             for seg in range(math.floor(FLOW_CONTROL_WIN_SIZE / DATA_LENGTH)):
                 segmentSend = Segment()
@@ -122,9 +123,30 @@ class RDTLayer(object):
                 self.sendChannel.send(segmentSend)
 
                 # Increment seq number
-                self.seq += DATA_LENGTH
                 self.waiting_ack.append(self.seq)
+                self.seq += DATA_LENGTH
+        elif (len(self.dataToSend) > 0) and (self.seq > len(self.dataToSend)):
+            # Resend packets which have not been acknowledged
+            # resent = []
+            for seq in self.waiting_ack:
+                # Get data to resend
+                start = seq 
+                end = seq + DATA_LENGTH
+                data = self.dataToSend[start: end]
 
+                # Form then send a segment
+                segmentSend = Segment()
+                segmentSend.setData(seq, data)
+                print("Resending segment: ", segmentSend.to_string())
+                self.sendChannel.send(segmentSend)
+
+                # # Remove, but keep track of segments resent
+                # self.waiting_ack.remove(seq)
+                # resent.append(seq)
+            # Add resemt segments to wait ack list
+            # for x in resent:
+            #     self.waiting_ack.append(x)
+            # resent.clear()   
         else:
             # No data to send, in acknowledgement cycle
             pass
@@ -137,12 +159,11 @@ class RDTLayer(object):
     # ################################################################################################################ #
     def processReceiveAndSendRespond(self):
 
-        if self.seq < len(self.dataToSend):
+        if len(self.dataToSend) > 0:
             # Client handling acknowledgemetns received from the server
             if len(self.receiveChannel.receiveQueue) > 0:
                 sorted_incoming = sorted(self.receiveChannel.receive(), key=lambda s: s.seqnum, reverse=False)
                 
-                # DO I NEED THIS???
                 # Remove acknowledged segments from list of acknowledgements
                 for seg in sorted_incoming:
                     print("Client received ask for: ", seg.acknum)
@@ -189,12 +210,17 @@ class RDTLayer(object):
                 pass
 
             elif inc_seg_len > 0:
-                # ############################################################################################################ #
-                # How do you respond to what you have received?
-                # How can you tell data segments apart from ack segemnts?
-                # for segment in range(len(listIncomingSegments)):
-                #     print("Server will process: ", listIncomingSegments[segment].payload)
+                # Collect corrupted segments to a list
+                discard = []
+                for segment in listIncomingSegments:
+                    testSegment = Segment()
+                    testSegment.setData(segment.seqnum, segment.payload)
 
+                    if (testSegment.checksum != segment.checksum): # and (len(segment.payload) > 0):
+                        discard.append(segment)
+                # Remove corrupted segments from incoming segment list
+                for corrupted in discard:
+                    listIncomingSegments.remove(corrupted)
                 
                 for segment in range(len(listIncomingSegments)):
                     if listIncomingSegments[segment].seqnum not in self.processed_seq:

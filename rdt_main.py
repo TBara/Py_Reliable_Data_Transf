@@ -48,9 +48,9 @@ server = RDTLayer()
 # Start with a reliable channel (all flags false)
 # As you create your rdt algorithm for send and receive, turn these on.
 outOfOrder = True
-dropPackets = False
+dropPackets = True
 delayPackets = True
-dataErrors = False
+dataErrors = True
 
 # Create unreliable communication channels
 clientToServerChannel = UnreliableChannel(outOfOrder,dropPackets,delayPackets,dataErrors)
@@ -64,6 +64,7 @@ server.setReceiveChannel(clientToServerChannel)
 
 # Set initial data that will be sent from client to server
 client.setDataToSend(dataToSend)
+client.data_len = len(dataToSend)
 
 loopIter = 0            # Used to track communication timing in iterations
 while True:
@@ -84,9 +85,6 @@ while True:
     print("Main--------------------------------------------")
     dataReceivedFromClient = server.getDataReceived()
     print("DataReceivedFromClient: {0}".format(dataReceivedFromClient))
-
-    if loopIter >= 105:
-        print("Loop Iter: ", loopIter)
 
     if dataReceivedFromClient == dataToSend:
         print('$$$$$$$$ ALL DATA RECEIVED $$$$$$$$')
