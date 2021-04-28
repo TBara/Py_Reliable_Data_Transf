@@ -37,8 +37,7 @@ class RDTLayer(object):
         self.countSegmentTimeouts = 0
         self.waiting_ack = []
         self.captured_segments = []
-        self.processed_seq = [] # Track of processed seq numbers. Discard duplicate segments
-        self.last_seq_rcvd = 0
+        self.processed_seq = [] 
 
     # ################################################################################################################ #
     # setSendChannel()                                                                                                 #
@@ -117,7 +116,7 @@ class RDTLayer(object):
                 # ############################################################################################################ #
                 # Display sending segment
                 segmentSend.setData(self.seq,data)
-                print("Sending segment: ", segmentSend.to_string())
+                # print("Sending segment: ", segmentSend.to_string())
 
                 # Use the unreliable sendChannel to send the segment
                 self.sendChannel.send(segmentSend)
@@ -137,16 +136,9 @@ class RDTLayer(object):
                 # Form then send a segment
                 segmentSend = Segment()
                 segmentSend.setData(seq, data)
-                print("Resending segment: ", segmentSend.to_string())
+                # print("Resending segment: ", segmentSend.to_string())
                 self.sendChannel.send(segmentSend)
 
-                # # Remove, but keep track of segments resent
-                # self.waiting_ack.remove(seq)
-                # resent.append(seq)
-            # Add resemt segments to wait ack list
-            # for x in resent:
-            #     self.waiting_ack.append(x)
-            # resent.clear()   
         else:
             # No data to send, in acknowledgement cycle
             pass
@@ -166,14 +158,14 @@ class RDTLayer(object):
                 
                 # Remove acknowledged segments from list of acknowledgements
                 for seg in sorted_incoming:
-                    print("Client received ask for: ", seg.acknum)
+                    # print("Client received ask for: ", seg.acknum)
                     if seg.acknum in self.waiting_ack:
                         self.waiting_ack.remove(seg.acknum) 
 
                 # Resend packets which have not been acknowledged
                 resent = []
                 for seq in self.waiting_ack:
-                    if seq < (self.seq - (DATA_LENGTH * 3)):
+                    if seq < (self.seq - (DATA_LENGTH * 5)):
                         # Get data to resend
                         start = seq 
                         end = seq + DATA_LENGTH
@@ -182,7 +174,7 @@ class RDTLayer(object):
                         # Form then send a segment
                         segmentSend = Segment()
                         segmentSend.setData(seq, data)
-                        print("Resending segment: ", segmentSend.to_string())
+                        # print("Resending segment: ", segmentSend.to_string())
                         self.sendChannel.send(segmentSend)
 
                         # Remove, but keep track of segments resent
@@ -223,21 +215,24 @@ class RDTLayer(object):
                     listIncomingSegments.remove(corrupted)
                 
                 for segment in range(len(listIncomingSegments)):
+                    # If the packet has not been processed yet
                     if listIncomingSegments[segment].seqnum not in self.processed_seq:
 
-                        segmentAck = Segment()     # Segment acknowledging packet(s) received
+                        # Segment acknowledging packet(s) received
+                        segmentAck = Segment()
                         segmentAck.setAck(listIncomingSegments[segment].seqnum)
-                        print("Sending ack: ", segmentAck.to_string(), " ", listIncomingSegments[segment].payload)
+                        # print("Sending ack: ", segmentAck.to_string(), " ", listIncomingSegments[segment].payload)
 
                         # Use the unreliable sendChannel to send the ack packet
                         self.sendChannel.send(segmentAck)
                         self.captured_segments.append(listIncomingSegments[segment])
                         self.processed_seq.append(listIncomingSegments[segment].seqnum)
-                        self.processed_seq.sort()
+
+                    # Acknowledge previously processed, duplicate segment    
                     else:
                         segmentAck = Segment()     # Segment acknowledging packet(s) received
                         segmentAck.setAck(listIncomingSegments[segment].seqnum)
-                        print("Sending ack: ", segmentAck.to_string(), " ", listIncomingSegments[segment].payload)
+                        # print("Sending ack: ", segmentAck.to_string(), " ", listIncomingSegments[segment].payload)
                         self.sendChannel.send(segmentAck)
 
 
