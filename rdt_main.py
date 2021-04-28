@@ -64,7 +64,6 @@ server.setReceiveChannel(clientToServerChannel)
 
 # Set initial data that will be sent from client to server
 client.setDataToSend(dataToSend)
-client.data_len = len(dataToSend)
 
 loopIter = 0            # Used to track communication timing in iterations
 while True:
