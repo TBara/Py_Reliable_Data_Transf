@@ -42,7 +42,6 @@ class UnreliableChannel():
         self.currentIteration = 0
 
     def send(self,seg):
-        a = 1
         self.sendQueue.append(seg)
 
     def receive(self):

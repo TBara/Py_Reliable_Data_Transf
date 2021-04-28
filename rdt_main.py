@@ -19,6 +19,9 @@ import time
 
 # dataToSend = "The quick brown fox jumped over the lazy dog"
 
+# dataToSend = "We choose to go to the moon. We choose to go to the moon in this "\
+# "decade and do the other things, not because they are easy, but because they are hard."
+
 dataToSend = "\r\n\r\n...We choose to go to the moon. We choose to go to the moon in this "\
 "decade and do the other things, not because they are easy, but because they are hard, "\
 "because that goal will serve to organize and measure the best of our energies and skills, "\
@@ -46,7 +49,7 @@ server = RDTLayer()
 # As you create your rdt algorithm for send and receive, turn these on.
 outOfOrder = True
 dropPackets = True
-delayPackets = False
+delayPackets = True
 dataErrors = True
 
 # Create unreliable communication channels
@@ -87,7 +90,7 @@ while True:
         break
 
     # time.sleep(0.1)
-    input("Press enter to continue...")
+    # input("Press enter to continue...")
 
 print("countTotalDataPackets: {0}".format(clientToServerChannel.countTotalDataPackets))
 print("countSentPackets: {0}".format(clientToServerChannel.countSentPackets + serverToClientChannel.countSentPackets))
