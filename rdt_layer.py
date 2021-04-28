@@ -107,7 +107,7 @@ class RDTLayer(object):
             print("Sending segment: ", segmentSend.to_string())
             self.sendChannel.send(segmentSend)
 
-        # Indicates Client receiving response from Server
+        # If Client has more bytes to send to server
         if (len(self.dataToSend) > 0) and (self.seq < len(self.dataToSend)):
             
             # Stay within the flow control window size
@@ -154,7 +154,7 @@ class RDTLayer(object):
                     # Form and send segment
                     segmentSend = Segment()
                     segmentSend.setData(seq, data)
-                    # print("Resending segment: ", segmentSend.to_string())
+                    print("Resending segment: ", segmentSend.to_string())
                     self.sendChannel.send(segmentSend)
 
         # Helper function to seperate server duties from client duties
