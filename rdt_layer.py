@@ -159,7 +159,7 @@ class RDTLayer(object):
 
         # Helper function to seperate server duties from client duties
         def server_process_recv_ack():
-            # Cumulative Ack
+            # CumulativeAck 11
 
             # Server receiving data
             # This call returns a list of incoming segments (see Segment class)...
