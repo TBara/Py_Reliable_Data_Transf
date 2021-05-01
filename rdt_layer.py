@@ -159,36 +159,27 @@ class RDTLayer(object):
 
         # Helper function to seperate server duties from client duties
         def server_process_recv_ack():
+            # Cumulative Ack
+
             # Server receiving data
             # This call returns a list of incoming segments (see Segment class)...
             listIncomingSegments = sorted(self.receiveChannel.receive(), key=lambda s: s.seqnum, reverse=False)
 
-            if len(listIncomingSegments) > 0:
-                # Handle data errors. Collect corrupted segments to a list
-                discard = []
-                for segment in listIncomingSegments:
-                    testSegment = Segment()
-                    testSegment.setData(segment.seqnum, segment.payload)
-
-                    if (testSegment.checksum != segment.checksum): # and (len(segment.payload) > 0):
-                        discard.append(segment)
-                # Remove corrupted segments from incoming segment list
-                for corrupted in discard:
-                    listIncomingSegments.remove(corrupted)
-                
+            if len(listIncomingSegments) > 0:                
                 for segment in range(len(listIncomingSegments)):
+                    if listIncomingSegments[segment].checkChecksum():
                     
-                    segmentAck = Segment()     # Segment acknowledging packet(s) received
-                    segmentAck.setAck(listIncomingSegments[segment].seqnum)
-                    print("Sending ack: ", segmentAck.to_string(), " ", listIncomingSegments[segment].payload)
-                    
-                    # Use the unreliable sendChannel to send the ack packet
-                    self.sendChannel.send(segmentAck)
-                    
-                    # Store received segments if new, otherwise discard duplicate segments
-                    if listIncomingSegments[segment].seqnum not in self.processed_seq:
-                        self.captured_segments.append(listIncomingSegments[segment])
-                        self.processed_seq.append(listIncomingSegments[segment].seqnum)
+                        segmentAck = Segment()     # Segment acknowledging packet(s) received
+                        segmentAck.setAck(listIncomingSegments[segment].seqnum)
+                        print("Sending ack: ", segmentAck.to_string(), " ", listIncomingSegments[segment].payload)
+                        
+                        # Use the unreliable sendChannel to send the ack packet
+                        self.sendChannel.send(segmentAck)
+                        
+                        # Store received segments if new, otherwise discard duplicate segments
+                        if listIncomingSegments[segment].seqnum not in self.processed_seq:
+                            self.captured_segments.append(listIncomingSegments[segment])
+                            self.processed_seq.append(listIncomingSegments[segment].seqnum)
 
         # Determine server or client mode
         if (len(self.dataToSend) > 0) and (len(self.receiveChannel.receiveQueue) > 0):
