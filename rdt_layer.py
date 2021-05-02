@@ -28,9 +28,12 @@ class RDTLayer(object):
         # Add items as needed
         self.seq = 0
         self.countSegmentTimeouts = 0
-        self.waiting_ack = []
-        self.captured_segments = []
-        self.processed_seq = [] # Track of processed seq numbers. Discard duplicate segments
+        self.last_proc_byte = 0         # Sending next or resend logic
+        self.send_queue = []            # For maintaining flow controls
+        self.staged_segments = []       # Segments received out of order, awaiting processing
+        self.rcvd_ack = []              # Counting Acks, if freq > 3 it will be resent
+        self.waiting_ack = []           # Seq numbers sent and awaiting Ack
+        self.captured_segments = []     # Segments processed. For final string compare
 
     # ################################################################################################################ #
     # setSendChannel()                                                                                                 #
@@ -114,9 +117,8 @@ class RDTLayer(object):
             for seg in range(math.floor(FLOW_CONTROL_WIN_SIZE / DATA_LENGTH)):
                 data = self.dataToSend[self.seq:self.seq + DATA_LENGTH]
                 send_data(self.seq, data)
-
-                self.waiting_ack.append(self.seq)
                 self.seq += DATA_LENGTH
+                self.waiting_ack.append(self.seq)
 
         # Once client sent all segments, resend segments without ack
         elif (len(self.dataToSend) > 0) and (self.seq > len(self.dataToSend)):
@@ -138,28 +140,42 @@ class RDTLayer(object):
             # Client handling acknowledgemetns received from the server
             sorted_incoming = sorted(self.receiveChannel.receive(), key=lambda s: s.seqnum, reverse=False)
             
-            # Remove acknowledged segments from list of acknowledgements
+            # Append acknoledgements to received list
             for seg in sorted_incoming:
+                self.rcvd_ack.append(seg.acknum)
+                # Remove acknowledged segments from list of acknowledgements
                 if seg.acknum in self.waiting_ack:
-                    self.waiting_ack.remove(seg.acknum) 
+                    self.waiting_ack[:] = [x for x in self.waiting_ack if x > seg.acknum]
 
-            # Resend packets which have not been acknowledged
-            for seq in self.waiting_ack:
-                # Timeout counter. Resend segments that have been
-                # waitng for acknowledgement for timeout period
-                if seq < (self.seq - (DATA_LENGTH * 5)):
-                    # Get data to resend
+            # If acknowledgement was received more than 3 times, resend it
+            freq = {}
+            for item in self.rcvd_ack:
+                freq[item] = self.rcvd_ack.count(item)
+
+            for seq, cnt in freq.items():
+                if cnt >= 3:
                     data = self.dataToSend[seq: seq + DATA_LENGTH]
-
                     # Form and send segment
                     segmentSend = Segment()
-                    segmentSend.setData(seq, data)
-                    print("Resending segment: ", segmentSend.to_string())
+                    segmentSend.setData(seq,data)
+                    print("Sending segment: ", segmentSend.to_string())
                     self.sendChannel.send(segmentSend)
+
+                    # remove resent segment
+                    for item in self.rcvd_ack:
+                        if item == seq:
+                            self.rcvd_ack[:] = [x for x in self.rcvd_ack if x <= item]
+                        
 
         # Helper function to seperate server duties from client duties
         def server_process_recv_ack():
-            # CumulativeAck 11
+            
+            # Helper function, redundant actions
+            def send_ack(ack):
+                segmentAck = Segment()
+                segmentAck.setAck(ack)
+                print("Sending ack: ", segmentAck.to_string())
+                self.sendChannel.send(segmentAck)
 
             # Server receiving data
             # This call returns a list of incoming segments (see Segment class)...
@@ -167,19 +183,37 @@ class RDTLayer(object):
 
             if len(listIncomingSegments) > 0:                
                 for segment in range(len(listIncomingSegments)):
+                    # Verify checksum
                     if listIncomingSegments[segment].checkChecksum():
-                    
-                        segmentAck = Segment()     # Segment acknowledging packet(s) received
-                        segmentAck.setAck(listIncomingSegments[segment].seqnum)
-                        print("Sending ack: ", segmentAck.to_string(), " ", listIncomingSegments[segment].payload)
-                        
-                        # Use the unreliable sendChannel to send the ack packet
-                        self.sendChannel.send(segmentAck)
-                        
-                        # Store received segments if new, otherwise discard duplicate segments
-                        if listIncomingSegments[segment].seqnum not in self.processed_seq:
+
+                        if listIncomingSegments[segment].seqnum == self.last_proc_byte:
+                            # Send ack
+                            send_ack(listIncomingSegments[segment].seqnum + len(listIncomingSegments[segment].payload))
+
+                            # Increment last processed byte variable
+                            self.last_proc_byte += len(listIncomingSegments[segment].payload)
+
+                            # Store received segments
                             self.captured_segments.append(listIncomingSegments[segment])
-                            self.processed_seq.append(listIncomingSegments[segment].seqnum)
+
+                            # Iterate staged segments to increment last_proc_byte up to next highest in-order received seq
+                            # Move segements from staged to captured segments
+                            for item in sorted(self.staged_segments, key=lambda s: s.seqnum, reverse=False):
+                                if item.seqnum == self.last_proc_byte:
+                                    self.captured_segments.append(item)
+                                    self.staged_segments.remove(item)
+                                    self.last_proc_byte += len(item.payload)
+
+                        # Send ack cumulative ack. Append received segement to staged segments list
+                        # when segments are missing or corrupted
+                        elif listIncomingSegments[segment].seqnum > self.last_proc_byte:
+                            send_ack(self.last_proc_byte)
+                            self.staged_segments.append(listIncomingSegments[segment])
+
+                    # Send ack cumulative ack. 
+                    else:
+                        send_ack(self.last_proc_byte)
+
 
         # Determine server or client mode
         if (len(self.dataToSend) > 0) and (len(self.receiveChannel.receiveQueue) > 0):
