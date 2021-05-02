@@ -84,7 +84,8 @@ class RDTLayer(object):
     # ################################################################################################################ #
     def processData(self):
         self.currentIteration += 1
-        self.processSend()
+        if len(self.dataToSend) > 0:
+            self.processSend()
         self.processReceiveAndSendRespond()
 
     # ################################################################################################################ #
@@ -107,25 +108,33 @@ class RDTLayer(object):
         def send_data(seq, data):
             segmentSend = Segment()
             segmentSend.setData(seq,data)
-            print("Sending segment: ", segmentSend.to_string())
-            self.sendChannel.send(segmentSend)
+            # Stage the segement in the send queue
+            self.send_queue.append(segmentSend)
 
         # If Client has more bytes to send to server
         if (len(self.dataToSend) > 0) and (self.seq < len(self.dataToSend)):
-            
-            # Stay within the flow control window size
-            for seg in range(math.floor(FLOW_CONTROL_WIN_SIZE / DATA_LENGTH)):
+            while len(self.send_queue) <= math.floor(FLOW_CONTROL_WIN_SIZE / DATA_LENGTH):
                 data = self.dataToSend[self.seq:self.seq + DATA_LENGTH]
                 send_data(self.seq, data)
-                self.seq += DATA_LENGTH
-                self.waiting_ack.append(self.seq)
+                self.seq += len(data)
 
-        # Once client sent all segments, resend segments without ack
-        elif (len(self.dataToSend) > 0) and (self.seq > len(self.dataToSend)):
+        # Once client sends all segments, resend segments without ack
+        elif (len(self.dataToSend) > 0) and (self.seq >= len(self.dataToSend)):
             for seq in self.waiting_ack:
                 data = self.dataToSend[seq: seq + DATA_LENGTH]
                 send_data(seq, data)
 
+        # Stay within the flow control window size
+        for seg in range(math.floor(FLOW_CONTROL_WIN_SIZE / DATA_LENGTH)):
+            if len(self.send_queue) > 0:
+                # Pop off the first segment and send it
+                sendSeg = self.send_queue.pop(0)
+                print("Sending segment: ", sendSeg.to_string())
+                self.sendChannel.send(sendSeg)
+                self.waiting_ack.append(sendSeg.seqnum)
+
+                if sendSeg.seqnum == 0:
+                    print("sendSeg.seqnum < seq")
 
     # ################################################################################################################ #
     # processReceive()                                                                                                 #
@@ -143,8 +152,9 @@ class RDTLayer(object):
             # Append acknoledgements to received list
             for seg in sorted_incoming:
                 self.rcvd_ack.append(seg.acknum)
-                # Remove acknowledged segments from list of acknowledgements
+                # Remove acknowledged segments from list of awaiting acknowledgements
                 if seg.acknum in self.waiting_ack:
+                    # Refrence: https://www.pythonforbeginners.com/basics/list-comprehensions-in-python
                     self.waiting_ack[:] = [x for x in self.waiting_ack if x > seg.acknum]
 
             # If acknowledgement was received more than 3 times, resend it
@@ -158,13 +168,13 @@ class RDTLayer(object):
                     # Form and send segment
                     segmentSend = Segment()
                     segmentSend.setData(seq,data)
-                    print("Sending segment: ", segmentSend.to_string())
-                    self.sendChannel.send(segmentSend)
+                    # Place the segment in front of the queue
+                    self.send_queue = [segmentSend] + self.send_queue
 
                     # remove resent segment
                     for item in self.rcvd_ack:
                         if item == seq:
-                            self.rcvd_ack[:] = [x for x in self.rcvd_ack if x <= item]
+                            self.rcvd_ack[:] = [x for x in self.rcvd_ack if x >= item]
                         
 
         # Helper function to seperate server duties from client duties
@@ -210,7 +220,10 @@ class RDTLayer(object):
                             send_ack(self.last_proc_byte)
                             self.staged_segments.append(listIncomingSegments[segment])
 
-                    # Send ack cumulative ack. 
+                        elif listIncomingSegments[segment].seqnum < self.last_proc_byte:
+                            continue
+
+                    # Send cumulative ack. 
                     else:
                         send_ack(self.last_proc_byte)
 

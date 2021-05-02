@@ -39,6 +39,7 @@ dataToSend = "\r\n\r\n...We choose to go to the moon. We choose to go to the moo
 "right, and do it first before this decade is out.\r\n\r\n"\
 "JFK - September 12, 1962\r\n"
 
+print("Data to send length: ", len(dataToSend))
 # #################################################################################################################### #
 
 # Create client and server
@@ -90,7 +91,7 @@ while True:
         break
 
     # time.sleep(0.1)
-    # input("Press enter to continue...")
+    #input("Press enter to continue...")
 
 print("countTotalDataPackets: {0}".format(clientToServerChannel.countTotalDataPackets))
 print("countSentPackets: {0}".format(clientToServerChannel.countSentPackets + serverToClientChannel.countSentPackets))
