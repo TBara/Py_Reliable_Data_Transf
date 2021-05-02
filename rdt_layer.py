@@ -133,9 +133,6 @@ class RDTLayer(object):
                 self.sendChannel.send(sendSeg)
                 self.waiting_ack.append(sendSeg.seqnum)
 
-                if sendSeg.seqnum == 0:
-                    print("sendSeg.seqnum < seq")
-
     # ################################################################################################################ #
     # processReceive()                                                                                                 #
     #                                                                                                                  #
@@ -170,6 +167,7 @@ class RDTLayer(object):
                     segmentSend.setData(seq,data)
                     # Place the segment in front of the queue
                     self.send_queue = [segmentSend] + self.send_queue
+                    self.countSegmentTimeouts += 1
 
                     # remove resent segment
                     for item in self.rcvd_ack:

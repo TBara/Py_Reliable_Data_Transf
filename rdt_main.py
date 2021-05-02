@@ -39,7 +39,6 @@ dataToSend = "\r\n\r\n...We choose to go to the moon. We choose to go to the moo
 "right, and do it first before this decade is out.\r\n\r\n"\
 "JFK - September 12, 1962\r\n"
 
-print("Data to send length: ", len(dataToSend))
 # #################################################################################################################### #
 
 # Create client and server
